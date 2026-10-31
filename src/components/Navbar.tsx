@@ -249,6 +249,22 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </button>
 
+          {/* Supabase Cloud Database Quick Setup Button */}
+          <button
+            onClick={() => setIsSupabaseModalOpen(true)}
+            className="relative p-2 text-slate-300 hover:text-emerald-300 hover:bg-slate-800 rounded-lg transition flex items-center gap-1 border border-emerald-500/20 bg-emerald-950/40"
+            title="Supabase Database Settings"
+          >
+            <Database className="w-4 h-4 text-emerald-400" />
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isSupabaseConfigured
+                  ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]'
+                  : 'bg-amber-400 animate-pulse'
+              }`}
+            ></span>
+          </button>
+
           {/* Login / Register with Referral Code Button */}
           <button
             onClick={() => setIsAuthModalOpen(true)}
