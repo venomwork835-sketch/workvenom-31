@@ -28,6 +28,7 @@ import {
   Bot,
   Filter,
   Crown,
+  Database,
 } from 'lucide-react';
 
 export const AdminPortal: React.FC = () => {
@@ -60,6 +61,8 @@ export const AdminPortal: React.FC = () => {
     planRequests,
     adminProcessPlanRequest,
     pendingPlanRequestsCount,
+    setIsSupabaseModalOpen,
+    isSupabaseConfigured,
   } = useApp();
 
   // The 4 main backend tabs in exact requested order:
@@ -356,6 +359,20 @@ export const AdminPortal: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsSupabaseModalOpen(true)}
+              className="bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 font-bold text-xs px-3.5 py-2 rounded-xl transition shadow flex items-center gap-1.5"
+              title="Configure Supabase Cloud Database"
+            >
+              <Database className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Supabase DB</span>
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  isSupabaseConfigured ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]' : 'bg-amber-400'
+                }`}
+              ></span>
+            </button>
+
             <button
               onClick={() => setViewMode('frontend')}
               className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs px-4 py-2 rounded-xl transition shadow flex items-center gap-1.5"

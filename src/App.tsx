@@ -13,11 +13,12 @@ import { WithdrawModal } from './components/frontend/WithdrawModal';
 import { MessagesModal } from './components/frontend/MessagesModal';
 import { CustomerServiceChat } from './components/frontend/CustomerServiceChat';
 import { PlansModal } from './components/frontend/PlansModal';
+import { SupabaseSettingsModal } from './components/frontend/SupabaseSettingsModal';
 import { AdminPortal } from './components/backend/AdminPortal';
 import { ProductCategory } from './types';
 
 function EbuyApp() {
-  const { viewMode, frontendTab } = useApp();
+  const { viewMode, frontendTab, isSupabaseModalOpen, setIsSupabaseModalOpen } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory>('all');
 
@@ -62,6 +63,10 @@ function EbuyApp() {
       <MessagesModal />
       <CustomerServiceChat />
       <PlansModal />
+      <SupabaseSettingsModal
+        isOpen={isSupabaseModalOpen}
+        onClose={() => setIsSupabaseModalOpen(false)}
+      />
     </div>
   );
 }

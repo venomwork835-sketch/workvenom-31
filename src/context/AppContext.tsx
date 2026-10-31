@@ -22,12 +22,20 @@ import { INITIAL_PRODUCTS } from '../data/mockProducts';
 import { INITIAL_MAIN_USER, INITIAL_FAKE_USERS } from '../data/mockUsers';
 import { INITIAL_TOP_SELLERS } from '../data/mockTopSellers';
 
+import { isSupabaseConfigured } from '../lib/supabaseClient';
+
 // Helper for guaranteed unique keys and IDs to prevent collision in React render trees
 export const generateUniqueId = (prefix: string = 'id'): string => {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 };
 
 interface AppContextType {
+  // Supabase Database Connection
+  isSupabaseModalOpen: boolean;
+  setIsSupabaseModalOpen: (open: boolean) => void;
+  isSupabaseConfigured: boolean;
+  checkSupabaseConfig: () => void;
+
   // Navigation & View Mode
   viewMode: 'frontend' | 'backend';
   setViewMode: (mode: 'frontend' | 'backend') => void;
@@ -164,12 +172,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [frontendTab, setFrontendTab] = useState<'home' | 'my_products' | 'sell_products' | 'orders' | 'profile'>('home');
 
   // Modals
+  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState<boolean>(false);
+  const [isSupabaseReady, setIsSupabaseReady] = useState<boolean>(() => isSupabaseConfigured());
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState<boolean>(false);
   const [isMessagesModalOpen, setIsMessagesModalOpen] = useState<boolean>(false);
   const [isCustomerServiceOpen, setIsCustomerServiceOpen] = useState<boolean>(false);
   const [isPlansModalOpen, setIsPlansModalOpen] = useState<boolean>(false);
   const [selectedProductForOrder, setSelectedProductForOrder] = useState<Product | null>(null);
+
+  const checkSupabaseConfig = () => {
+    setIsSupabaseReady(isSupabaseConfigured());
+  };
+
+  useEffect(() => {
+    const handleConfigChange = () => {
+      setIsSupabaseReady(isSupabaseConfigured());
+    };
+    window.addEventListener('supabase-config-changed', handleConfigChange);
+    return () => window.removeEventListener('supabase-config-changed', handleConfigChange);
+  }, []);
 
   // Telegram Support URL Config
   const [telegramSupportUrl, setTelegramSupportUrlState] = useState<string>(() => {
@@ -2052,6 +2074,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsMessagesModalOpen,
         isCustomerServiceOpen,
         setIsCustomerServiceOpen,
+        isSupabaseModalOpen,
+        setIsSupabaseModalOpen,
+        isSupabaseConfigured: isSupabaseReady,
+        checkSupabaseConfig,
         unreadNotificationCount,
         unreadChatCount,
         pendingWithdrawalsCount,

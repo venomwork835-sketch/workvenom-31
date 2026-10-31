@@ -11,6 +11,7 @@ import {
   LogIn,
   Wallet,
   Send,
+  Database,
 } from 'lucide-react';
 import { ProductCategory } from '../types';
 
@@ -43,6 +44,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     pendingWithdrawalsCount,
     pendingOrdersCount,
     setIsPlansModalOpen,
+    setIsSupabaseModalOpen,
+    isSupabaseConfigured,
   } = useApp();
 
   const categories: { label: string; value: ProductCategory }[] = [
@@ -81,6 +84,21 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Send className="w-3 h-3 text-sky-300" />
               <span>Telegram Support</span>
+            </button>
+
+            <button
+              onClick={() => setIsSupabaseModalOpen(true)}
+              className="flex items-center gap-1.5 font-semibold text-emerald-200 bg-emerald-950/70 hover:bg-emerald-900/90 px-2.5 py-1 rounded-lg border border-emerald-500/40 text-[11px] transition shadow-sm"
+              title="Configure Supabase Cloud Database"
+            >
+              <Database className="w-3 h-3 text-emerald-400" />
+              <span className="hidden sm:inline">Supabase</span>
+              <span>DB</span>
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isSupabaseConfigured ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]' : 'bg-amber-400'
+                }`}
+              ></span>
             </button>
 
             <button
