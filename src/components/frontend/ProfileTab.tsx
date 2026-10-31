@@ -375,39 +375,6 @@ export const ProfileTab: React.FC = () => {
           </div>
         </button>
 
-        <div className="border-t border-slate-100 mx-3"></div>
-
-        {/* Option 4: Supabase Database Integration */}
-        <button
-          onClick={() => setIsSupabaseModalOpen(true)}
-          className="w-full flex items-center justify-between p-4 rounded-2xl hover:bg-slate-50 transition group text-left"
-        >
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-105 transition shadow-sm border border-emerald-100">
-              <Database className="w-6 h-6 stroke-[2.2]" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-black text-slate-900 group-hover:text-emerald-700 transition">
-                  Supabase Database
-                </h3>
-                {isSupabaseConfigured ? (
-                  <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Connected
-                  </span>
-                ) : (
-                  <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-200">
-                    Setup Keys
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-slate-500">
-                Configure Supabase URL and Anon Key stored securely in your browser
-              </p>
-            </div>
-          </div>
-          <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-700 group-hover:translate-x-0.5 transition" />
-        </button>
       </div>
 
       {/* Admin Quick Switch & Support Note */}

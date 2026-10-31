@@ -180,6 +180,7 @@ export interface Product {
   stock: number;
   specs: string[];
   description: string;
+  instructions?: string;
   isTrending: boolean;
   commissionRate?: number; // defaults to 0.05
 }

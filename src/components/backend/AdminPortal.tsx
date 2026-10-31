@@ -29,6 +29,14 @@ import {
   Filter,
   Crown,
   Database,
+  Key,
+  Eye,
+  EyeOff,
+  Link,
+  Copy,
+  Check,
+  LogOut,
+  Calendar,
 } from 'lucide-react';
 
 export const AdminPortal: React.FC = () => {
@@ -63,6 +71,11 @@ export const AdminPortal: React.FC = () => {
     pendingPlanRequestsCount,
     setIsSupabaseModalOpen,
     isSupabaseConfigured,
+    isAdminAuthenticated,
+    adminLogin,
+    adminLogout,
+    setSharedDealModalOpen,
+    setSharedDealData,
   } = useApp();
 
   // The 4 main backend tabs in exact requested order:
@@ -71,6 +84,26 @@ export const AdminPortal: React.FC = () => {
   // 3. Orders & Products (Orders & Add to Member Account)
   // 4. Chat (Chat with 10 Members)
   const [activeAdminTab, setActiveAdminTab] = useState<'members' | 'withdrawals' | 'orders' | 'chat'>('members');
+
+  // Admin Login Screen state
+  const [adminUser, setAdminUser] = useState('');
+  const [adminPass, setAdminPass] = useState('');
+  const [adminAuthError, setAdminAuthError] = useState<string | null>(null);
+  const [showPass, setShowPass] = useState(false);
+
+  // Tab 2: Custom Withdrawal Decision Modal State
+  const [wdModalTarget, setWdModalTarget] = useState<WithdrawalRequest | null>(null);
+  const [wdDecision, setWdDecision] = useState<'approve' | 'reject'>('approve');
+  const [wdNote, setWdNote] = useState<string>('');
+  const [wdTime, setWdTime] = useState<string>('');
+  const [wdDecisionFeedback, setWdDecisionFeedback] = useState<string | null>(null);
+
+  // Tab 3: Custom Product Share Link Generator
+  const [shareTargetProd, setShareTargetProd] = useState<Product | null>(null);
+  const [sharePrice, setSharePrice] = useState<number>(250);
+  const [shareProfit, setShareProfit] = useState<number>(50);
+  const [shareTitle, setShareTitle] = useState<string>('');
+  const [copyFeedback, setCopyFeedback] = useState(false);
 
   // Tab 1: Member Financials Edit Modal
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -89,7 +122,7 @@ export const AdminPortal: React.FC = () => {
   const [withdrawFilter, setWithdrawFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
 
   // Tab 3: Orders & Products state
-  const [orderSubTab, setOrderSubTab] = useState<'plan_requests' | 'buyback' | 'plans' | 'assign' | 'orders' | 'add_catalog'>('plan_requests');
+  const [orderSubTab, setOrderSubTab] = useState<'orders' | 'add_catalog' | 'plan_requests' | 'buyback' | 'plans' | 'assign'>('orders');
   const [planRequestFilter, setPlanRequestFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [planActionFeedback, setPlanActionFeedback] = useState<string | null>(null);
   
@@ -127,9 +160,13 @@ export const AdminPortal: React.FC = () => {
   const [newCatalogTitle, setNewCatalogTitle] = useState('');
   const [newCatalogCategory, setNewCatalogCategory] = useState<ProductCategory>('mobiles');
   const [newCatalogOriginalPrice, setNewCatalogOriginalPrice] = useState<number>(1200);
+  const [newCatalogDiscountPrice, setNewCatalogDiscountPrice] = useState<number>(960);
   const [newCatalogImage, setNewCatalogImage] = useState('https://images.unsplash.com/photo-1592750475338-74b7b21085ab?auto=format&fit=crop&w=400&q=80');
   const [newCatalogSpecs, setNewCatalogSpecs] = useState('Flagship Processor, OLED Display, 5G');
+  const [newCatalogInstructions, setNewCatalogInstructions] = useState('Verify device specifications on delivery.');
   const [newCatalogDesc, setNewCatalogDesc] = useState('High performance device with 20% discount promotional rate.');
+  const [newCatalogStock, setNewCatalogStock] = useState<number>(50);
+  const [newCatalogProfitRate, setNewCatalogProfitRate] = useState<number>(0.20);
   const [catalogSuccessMsg, setCatalogSuccessMsg] = useState<string | null>(null);
 
   // Tab 4: Chat Desk
@@ -245,33 +282,102 @@ export const AdminPortal: React.FC = () => {
     }, 3000);
   };
 
+  // Admin Login Gateway submit
+  const handleAdminLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminAuthError(null);
+    const res = adminLogin(adminUser, adminPass);
+    if (!res.success) {
+      setAdminAuthError(res.message);
+    }
+  };
+
+  // Withdrawal Decision Handlers
+  const handleOpenWdModal = (wd: WithdrawalRequest, action: 'approve' | 'reject') => {
+    setWdModalTarget(wd);
+    setWdDecision(action);
+    const now = new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+    setWdTime(now);
+    if (action === 'approve') {
+      setWdNote(`Approved & Paid via ${wd.method}. Payout Ref: TX-${Date.now().toString().slice(-6)}`);
+    } else {
+      setWdNote(`Verification required: Destination account details mismatch or unverified ID.`);
+    }
+  };
+
+  const handleConfirmWdDecision = () => {
+    if (!wdModalTarget) return;
+    adminProcessWithdrawal(wdModalTarget.id, wdDecision, wdNote, wdTime);
+    setWdDecisionFeedback(`Withdrawal request for ${wdModalTarget.userName} (${wdDecision.toUpperCase()}) processed successfully!`);
+    setWdModalTarget(null);
+    setTimeout(() => setWdDecisionFeedback(null), 3500);
+  };
+
+  // Product Share Link Generator Handlers
+  const handleOpenShareModal = (prod: Product) => {
+    setShareTargetProd(prod);
+    setSharePrice(prod.discountPrice);
+    setShareProfit(Number((prod.discountPrice * (prod.commissionRate || 0.20)).toFixed(2)));
+    setShareTitle(prod.title);
+    setCopyFeedback(false);
+  };
+
+  const getShareableUrl = () => {
+    if (!shareTargetProd) return '';
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const path = typeof window !== 'undefined' ? window.location.pathname : '';
+    return `${origin}${path}?deal=${shareTargetProd.id}&price=${sharePrice}&profit=${shareProfit}&title=${encodeURIComponent(shareTitle || shareTargetProd.title)}`;
+  };
+
+  const handleCopyShareLink = () => {
+    const url = getShareableUrl();
+    if (!url) return;
+    navigator.clipboard?.writeText(url);
+    setCopyFeedback(true);
+    setTimeout(() => setCopyFeedback(false), 2500);
+  };
+
+  const handleTestShareLinkInStore = () => {
+    if (!shareTargetProd) return;
+    setSharedDealData({
+      product: shareTargetProd,
+      customPrice: sharePrice,
+      customProfit: shareProfit,
+      dealTitle: shareTitle || shareTargetProd.title,
+    });
+    setSharedDealModalOpen(true);
+    setViewMode('frontend');
+  };
+
   // Add product to store catalog handler
   const handleAddNewCatalogProduct = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCatalogTitle.trim()) return;
 
     const original = Number(newCatalogOriginalPrice);
-    const discount = Number((original * 0.8).toFixed(2));
+    const discount = Number(newCatalogDiscountPrice || (original * 0.8).toFixed(2));
+    const profitRate = Number(newCatalogProfitRate) || 0.20;
 
     adminAddProductToCatalog({
       title: newCatalogTitle.trim(),
       category: newCatalogCategory,
       originalPrice: original,
       discountPrice: discount,
-      discountPercentage: 20,
+      discountPercentage: Math.max(1, Math.round(((original - discount) / original) * 100)),
       rating: 4.9,
-      reviewCount: 24,
+      reviewCount: 28,
       imageUrl: newCatalogImage.trim() || 'https://images.unsplash.com/photo-1592750475338-74b7b21085ab?auto=format&fit=crop&w=400&q=80',
-      stock: 50,
+      stock: newCatalogStock || 50,
       specs: newCatalogSpecs.split(',').map(s => s.trim()).filter(Boolean),
+      instructions: newCatalogInstructions.trim(),
       description: newCatalogDesc.trim(),
       isTrending: true,
-      commissionRate: 0.05,
+      commissionRate: profitRate,
     });
 
-    setCatalogSuccessMsg(`Product "${newCatalogTitle}" added to E-seller store catalog with 20% OFF!`);
+    setCatalogSuccessMsg(`Product "${newCatalogTitle}" added to Eseller store catalog with discount price $${discount.toFixed(2)} and ${(profitRate * 100).toFixed(0)}% profit! It is now live on the frontend.`);
     setNewCatalogTitle('');
-    setTimeout(() => setCatalogSuccessMsg(null), 3000);
+    setTimeout(() => setCatalogSuccessMsg(null), 4000);
   };
 
   // Send admin chat message
@@ -336,6 +442,101 @@ export const AdminPortal: React.FC = () => {
     (u.referralCode && u.referralCode.toLowerCase().includes(chatSearchQuery.toLowerCase()))
   );
 
+  // Admin Login Gateway Protection
+  if (!isAdminAuthenticated) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-slate-100">
+        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl shadow-amber-500/5 relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-400"></div>
+
+          <div className="text-center space-y-2 mb-6">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center shadow-inner">
+              <ShieldCheck className="w-9 h-9" />
+            </div>
+            <h1 className="text-2xl font-black text-white tracking-tight">Eseller Central Backend</h1>
+            <p className="text-xs text-slate-400">
+              Restricted Administrative Gateway. Please authenticate with supervisor credentials.
+            </p>
+          </div>
+
+          {adminAuthError && (
+            <div className="mb-4 bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-bold p-3 rounded-xl flex items-center gap-2">
+              <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
+              <span>{adminAuthError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleAdminLoginSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-amber-400" />
+                <span>Admin Username</span>
+              </label>
+              <input
+                type="text"
+                value={adminUser}
+                onChange={e => setAdminUser(e.target.value)}
+                placeholder="Enter username (default: admin)"
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none focus:border-amber-400 transition"
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Key className="w-3.5 h-3.5 text-amber-400" /> Password
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowPass(!showPass)}
+                  className="text-[11px] text-amber-400 hover:text-amber-300 flex items-center gap-1"
+                >
+                  {showPass ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                  <span>{showPass ? 'Hide' : 'Show'}</span>
+                </button>
+              </label>
+              <input
+                type={showPass ? 'text' : 'password'}
+                value={adminPass}
+                onChange={e => setAdminPass(e.target.value)}
+                placeholder="Enter password (default: admin123)"
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none focus:border-amber-400 transition"
+                required
+              />
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/60 text-[11px] text-slate-400 space-y-1">
+              <div className="font-bold text-amber-400">Default Root Credentials:</div>
+              <div className="flex justify-between font-mono">
+                <span>Username: <strong className="text-white">admin</strong></span>
+                <span>Password: <strong className="text-white">admin123</strong></span>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3 px-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-sm rounded-xl transition shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>Unlock Admin Desk</span>
+            </button>
+          </form>
+
+          <div className="mt-6 pt-4 border-t border-slate-800/80 text-center">
+            <button
+              onClick={() => setViewMode('frontend')}
+              className="text-xs text-slate-400 hover:text-white flex items-center justify-center gap-1.5 mx-auto transition"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Cancel & Return to Front Store</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 pb-20">
       {/* Top Admin Navigation Header */}
@@ -347,7 +548,7 @@ export const AdminPortal: React.FC = () => {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-lg font-black text-white tracking-tight">E-seller Central Control Desk</h1>
+                <h1 className="text-lg font-black text-white tracking-tight">Eseller Central Control Desk</h1>
                 <span className="bg-amber-500/20 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-500/30">
                   ROOT ADMIN
                 </span>
@@ -371,6 +572,15 @@ export const AdminPortal: React.FC = () => {
                   isSupabaseConfigured ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]' : 'bg-amber-400'
                 }`}
               ></span>
+            </button>
+
+            <button
+              onClick={adminLogout}
+              className="bg-rose-950/80 hover:bg-rose-900 border border-rose-500/40 text-rose-300 font-bold text-xs px-3.5 py-2 rounded-xl transition shadow flex items-center gap-1.5"
+              title="Log Out of Root Admin Desk"
+            >
+              <LogOut className="w-3.5 h-3.5 text-rose-400" />
+              <span>Log Out Admin</span>
             </button>
 
             <button
@@ -556,6 +766,7 @@ export const AdminPortal: React.FC = () => {
                     <tr>
                       <th className="py-3 px-4">Member</th>
                       <th className="py-3 px-3">Referral Code</th>
+                      <th className="py-3 px-3">Referred By</th>
                       <th className="py-3 px-3">Store Plan</th>
                       <th className="py-3 px-3">Available ($)</th>
                       <th className="py-3 px-3">Freeze ($)</th>
@@ -602,8 +813,21 @@ export const AdminPortal: React.FC = () => {
                           {/* Member's Own Referral Code */}
                           <td className="py-3 px-3">
                             <span className="font-mono text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                              {user.referralCode || 'REF-EBUY99'}
+                              {user.referralCode || 'REF-ESELLER99'}
                             </span>
+                          </td>
+
+                          {/* Referred By / Sponsor Code */}
+                          <td className="py-3 px-3">
+                            {user.referredBy ? (
+                              <div className="flex items-center gap-1 text-[11px]">
+                                <span className="font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                                  {user.referredBy}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-slate-500 italic">Direct / Root</span>
+                            )}
                           </td>
 
                           {/* Store Plan */}
@@ -715,6 +939,106 @@ export const AdminPortal: React.FC = () => {
                   </tbody>
                 </table>
               </div>
+            </div>
+
+            {/* Dedicated Live Referral Registrations & Network Desk Card */}
+            <div className="bg-gradient-to-br from-slate-800/80 to-slate-900 border border-emerald-500/30 rounded-3xl p-6 shadow-xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center font-black">
+                    <Share2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-white flex items-center gap-2">
+                      ⚡ Live Referral Signups & Network Desk
+                      <span className="bg-emerald-500 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-full">
+                        {allUsers.filter(u => u.referredBy).length} Tracked
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Real-time register of members who joined the store using an invitation / referral code from front.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <span className="text-xs text-slate-400">Total Referral Network Volume: </span>
+                  <span className="text-sm font-black font-mono text-emerald-400">
+                    ${allUsers.filter(u => u.referredBy).reduce((acc, u) => acc + u.availableBalance, 0).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              {allUsers.filter(u => u.referredBy).length === 0 ? (
+                <div className="p-6 text-center text-slate-400 text-xs italic bg-slate-900/60 rounded-2xl border border-slate-800">
+                  No member registered via referral code yet. When a user enters a referral code on signup or login, they will be tracked here live.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {allUsers
+                    .filter(u => u.referredBy)
+                    .map(member => (
+                      <div
+                        key={`ref-${member.id}`}
+                        className="bg-slate-950/80 border border-slate-800 hover:border-emerald-500/50 rounded-2xl p-4 transition space-y-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <img
+                              src={member.avatar}
+                              alt={member.name}
+                              className="w-9 h-9 rounded-full object-cover border border-emerald-500/40"
+                            />
+                            <div>
+                              <div className="text-xs font-black text-white">{member.name}</div>
+                              <div className="text-[10px] text-slate-400">{member.email}</div>
+                            </div>
+                          </div>
+                          <span className="text-[9px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+                            Active
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-slate-800">
+                          <div>
+                            <span className="text-slate-500 block text-[10px]">Sponsor Code:</span>
+                            <span className="font-mono font-bold text-amber-400">{member.referredBy}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block text-[10px]">Store Plan:</span>
+                            <span className="font-bold text-slate-200">Plan {member.planLevel || 1}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block text-[10px]">Available:</span>
+                            <span className="font-mono font-bold text-white">${member.availableBalance.toFixed(2)}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block text-[10px]">Credit Score:</span>
+                            <span className="font-bold text-emerald-400">{member.creditScore}%</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            onClick={() => handleOpenEditUser(member)}
+                            className="flex-1 py-1 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded-lg transition text-center"
+                          >
+                            Credit Balance
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedChatUserId(member.id);
+                              setActiveAdminTab('chat');
+                            }}
+                            className="flex-1 py-1 px-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-[10px] font-bold rounded-lg transition text-center"
+                          >
+                            Open Chat
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -878,21 +1202,27 @@ export const AdminPortal: React.FC = () => {
                             {wd.status === 'pending' ? (
                               <div className="flex items-center justify-end gap-1.5">
                                 <button
-                                  onClick={() => adminProcessWithdrawal(wd.id, 'approve', 'Approved by Root Administrator. Transferred successfully.')}
+                                  onClick={() => handleOpenWdModal(wd, 'approve')}
                                   className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-3 py-1.5 rounded-xl text-xs transition shadow flex items-center gap-1"
                                 >
                                   <CheckCircle2 className="w-3.5 h-3.5" /> Approve Payout
                                 </button>
                                 <button
-                                  onClick={() => adminProcessWithdrawal(wd.id, 'reject', 'Account verification failed. Funds refunded.')}
+                                  onClick={() => handleOpenWdModal(wd, 'reject')}
                                   className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 border border-rose-500/30 font-bold px-2.5 py-1.5 rounded-xl text-xs transition flex items-center gap-1"
                                 >
                                   <XCircle className="w-3.5 h-3.5" /> Reject
                                 </button>
                               </div>
                             ) : (
-                              <div className="text-[10px] text-slate-400 italic">
-                                {wd.adminRemark || 'Processed'}
+                              <div className="text-[10px] space-y-0.5 text-right">
+                                <div className="text-white font-medium">{wd.adminRemark || 'Processed'}</div>
+                                {wd.processedAt && (
+                                  <div className="text-[9px] text-amber-400 font-mono flex items-center justify-end gap-1">
+                                    <Clock className="w-3 h-3 text-amber-400" />
+                                    <span>{wd.processedAt}</span>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </td>
@@ -1785,108 +2115,291 @@ export const AdminPortal: React.FC = () => {
               </div>
             )}
 
-            {/* Sub-Section 3: ADD NEW PRODUCT TO STORE CATALOG */}
+            {/* Sub-Section 3: ADD NEW PRODUCT TO STORE CATALOG & CREATE SHARE LINKS */}
             {orderSubTab === 'add_catalog' && (
-              <div className="bg-slate-800/60 border border-slate-700/80 rounded-3xl p-6 shadow-xl space-y-5 max-w-3xl">
-                <div>
-                  <h2 className="text-base font-black text-white flex items-center gap-2">
-                    <ShoppingBag className="w-5 h-5 text-amber-400" />
-                    Add New Product to Ebuy Store Catalog
-                  </h2>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Added products will automatically show with a **20% OFF** discount badge in the front store catalog.
-                  </p>
-                </div>
-
-                {catalogSuccessMsg && (
-                  <div className="bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 p-3 rounded-xl text-xs font-bold flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>{catalogSuccessMsg}</span>
-                  </div>
-                )}
-
-                <form onSubmit={handleAddNewCatalogProduct} className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-300">Product Title</label>
-                      <input
-                        type="text"
-                        value={newCatalogTitle}
-                        onChange={e => setNewCatalogTitle(e.target.value)}
-                        placeholder="e.g. Galaxy Z Fold 6 Ultra"
-                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-400"
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-300">Category</label>
-                      <select
-                        value={newCatalogCategory}
-                        onChange={e => setNewCatalogCategory(e.target.value as ProductCategory)}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-400"
-                      >
-                        <option value="mobiles">Mobiles</option>
-                        <option value="laptops">Laptops</option>
-                        <option value="electronics">Electronics & Gaming</option>
-                        <option value="audio">Audio & Headphones</option>
-                        <option value="wearables">Smart Wearables</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-300">Original Price ($)</label>
-                      <input
-                        type="number"
-                        value={newCatalogOriginalPrice}
-                        onChange={e => setNewCatalogOriginalPrice(Number(e.target.value))}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-400"
-                        required
-                      />
-                      <p className="text-[10px] text-amber-400 font-semibold">
-                        20% discount price will be: ${(newCatalogOriginalPrice * 0.8).toFixed(2)}
+              <div className="space-y-6">
+                <div className="bg-slate-800/60 border border-slate-700/80 rounded-3xl p-6 shadow-xl space-y-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-base font-black text-white flex items-center gap-2">
+                        <ShoppingBag className="w-5 h-5 text-amber-400" />
+                        Create & Publish New Product to Eseller Store
+                      </h2>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Any product created here will immediately appear live on the front store catalog with 20% discount badge, instructions, and full checkout capability.
                       </p>
                     </div>
 
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-300">Image URL</label>
+                    <div className="text-xs text-amber-400 font-bold bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4" />
+                      <span>Instant Frontend Synchronization</span>
+                    </div>
+                  </div>
+
+                  {catalogSuccessMsg && (
+                    <div className="bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 p-3.5 rounded-2xl text-xs font-bold flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>{catalogSuccessMsg}</span>
+                    </div>
+                  )}
+
+                  <form onSubmit={handleAddNewCatalogProduct} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="space-y-1 sm:col-span-2">
+                        <label className="text-xs font-bold text-slate-300">Product Title / Name</label>
+                        <input
+                          type="text"
+                          value={newCatalogTitle}
+                          onChange={e => setNewCatalogTitle(e.target.value)}
+                          placeholder="e.g. Apple iPhone 16 Pro Max 512GB Natural Titanium"
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-amber-400"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-300">Store Category</label>
+                        <select
+                          value={newCatalogCategory}
+                          onChange={e => setNewCatalogCategory(e.target.value as ProductCategory)}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-amber-400 font-bold"
+                        >
+                          <option value="mobiles">Mobiles & Smartphones</option>
+                          <option value="laptops">Laptops & MacBooks</option>
+                          <option value="electronics">Electronics & Gaming</option>
+                          <option value="audio">Audio & Headphones</option>
+                          <option value="wearables">Smart Watches & Wearables</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-300">Original Price ($)</label>
+                        <input
+                          type="number"
+                          value={newCatalogOriginalPrice}
+                          onChange={e => {
+                            const orig = Number(e.target.value);
+                            setNewCatalogOriginalPrice(orig);
+                            setNewCatalogDiscountPrice(Number((orig * 0.8).toFixed(2)));
+                          }}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono outline-none focus:border-amber-400"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-300">Front Discount Price ($)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={newCatalogDiscountPrice}
+                          onChange={e => setNewCatalogDiscountPrice(Number(e.target.value))}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-amber-400 font-mono font-bold outline-none focus:border-amber-400"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-300">Guaranteed Profit Rate</label>
+                        <select
+                          value={newCatalogProfitRate}
+                          onChange={e => setNewCatalogProfitRate(Number(e.target.value))}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-emerald-400 font-mono font-bold outline-none focus:border-amber-400"
+                        >
+                          <option value={0.10}>10% Profit Margin</option>
+                          <option value={0.15}>15% Profit Margin</option>
+                          <option value={0.20}>20% Standard Margin (Default)</option>
+                          <option value={0.25}>25% High-Yield Margin</option>
+                          <option value={0.30}>30% Super Margin</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-300">Initial Stock Units</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={newCatalogStock}
+                          onChange={e => setNewCatalogStock(Number(e.target.value))}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono outline-none focus:border-amber-400"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    {/* Image URL & Quick Demo Presets */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-300">Product Image URL</label>
+                        <span className="text-[10px] text-slate-400">Or pick one of the quick presets below:</span>
+                      </div>
                       <input
                         type="url"
                         value={newCatalogImage}
                         onChange={e => setNewCatalogImage(e.target.value)}
+                        placeholder="https://images.unsplash.com/..."
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-400"
+                      />
+
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {[
+                          { label: 'iPhone 16 Pro', url: 'https://images.unsplash.com/photo-1592750475338-74b7b21085ab?auto=format&fit=crop&w=400&q=80' },
+                          { label: 'MacBook Pro M3', url: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=400&q=80' },
+                          { label: 'Sony WH-1000XM5', url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=400&q=80' },
+                          { label: 'Apple Watch Ultra', url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=400&q=80' },
+                          { label: 'Galaxy S24 Ultra', url: 'https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?auto=format&fit=crop&w=400&q=80' },
+                          { label: 'RTX 4090 Gaming Rig', url: 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=400&q=80' },
+                        ].map((preset, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setNewCatalogImage(preset.url)}
+                            className="text-[10px] bg-slate-900 hover:bg-slate-700 text-slate-300 hover:text-white px-2 py-1 rounded-lg border border-slate-700 transition"
+                          >
+                            + {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-300">Specifications (comma separated)</label>
+                        <input
+                          type="text"
+                          value={newCatalogSpecs}
+                          onChange={e => setNewCatalogSpecs(e.target.value)}
+                          placeholder="e.g. 512GB Storage, 16GB RAM, 5G Chipset, Titanium Frame"
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-400"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-amber-300 flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Instructions & Delivery Notes (Special Requirement)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={newCatalogInstructions}
+                          onChange={e => setNewCatalogInstructions(e.target.value)}
+                          placeholder="e.g. Verify IMEI upon receipt. Immediate buy-back eligible upon plan settlement."
+                          className="w-full bg-slate-900 border border-amber-500/40 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-400"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-300">Product Overview & Detailed Description</label>
+                      <textarea
+                        rows={2}
+                        value={newCatalogDesc}
+                        onChange={e => setNewCatalogDesc(e.target.value)}
+                        placeholder="Comprehensive product copy shown in store..."
                         className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-400"
                       />
                     </div>
+
+                    <button
+                      type="submit"
+                      className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black py-3 px-6 rounded-xl text-xs uppercase tracking-wider transition shadow-lg flex items-center gap-2"
+                    >
+                      <PlusCircle className="w-4 h-4" />
+                      <span>Publish Product to Front Store</span>
+                    </button>
+                  </form>
+                </div>
+
+                {/* Catalog Listing & Share Links Table */}
+                <div className="bg-slate-800/50 border border-slate-700/80 rounded-3xl overflow-hidden shadow-xl space-y-4 p-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-700/80 pb-4">
+                    <div>
+                      <h3 className="text-sm font-black text-white flex items-center gap-2">
+                        <Link className="w-4 h-4 text-amber-400" />
+                        Store Product Catalog & Custom Referral Direct-Buy Links ({products.length} Products)
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Generate custom promotional links with modified price and profit yield. When a customer opens the link on frontend, a Direct Buy modal opens instantly!
+                      </p>
+                    </div>
+
+                    <div className="text-xs text-slate-300 font-mono">
+                      Catalog Total: <strong className="text-white">{products.length}</strong> items
+                    </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-300">Specifications (comma separated)</label>
-                    <input
-                      type="text"
-                      value={newCatalogSpecs}
-                      onChange={e => setNewCatalogSpecs(e.target.value)}
-                      placeholder="e.g. 512GB Storage, 16GB RAM, Snapdragon 8 Gen 3"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-400"
-                    />
-                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs text-slate-300">
+                      <thead className="bg-slate-900/80 text-[11px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-700">
+                        <tr>
+                          <th className="py-3 px-4">Product Details</th>
+                          <th className="py-3 px-3">Category</th>
+                          <th className="py-3 px-3">Front Price</th>
+                          <th className="py-3 px-3">Commission / Profit</th>
+                          <th className="py-3 px-3">Stock</th>
+                          <th className="py-3 px-4 text-right">Referral / Share Link</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-700/60 font-medium">
+                        {products.map(prod => {
+                          const profit = (prod.discountPrice * (prod.commissionRate || 0.20)).toFixed(2);
+                          return (
+                            <tr key={prod.id} className="hover:bg-slate-800/80 transition">
+                              <td className="py-3 px-4">
+                                <div className="flex items-center gap-3 max-w-[280px]">
+                                  <img
+                                    src={prod.imageUrl}
+                                    alt={prod.title}
+                                    className="w-10 h-10 object-contain bg-white rounded-lg p-1 shrink-0 border border-slate-700"
+                                  />
+                                  <div className="min-w-0">
+                                    <div className="font-bold text-white truncate">{prod.title}</div>
+                                    {prod.instructions && (
+                                      <div className="text-[10px] text-amber-400 truncate">
+                                        ℹ️ {prod.instructions}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
 
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-300">Description</label>
-                    <textarea
-                      rows={2}
-                      value={newCatalogDesc}
-                      onChange={e => setNewCatalogDesc(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-400"
-                    />
-                  </div>
+                              <td className="py-3 px-3">
+                                <span className="bg-slate-700/60 text-slate-300 px-2 py-0.5 rounded text-[10px] font-bold uppercase">
+                                  {prod.category}
+                                </span>
+                              </td>
 
-                  <button
-                    type="submit"
-                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-2.5 px-6 rounded-xl text-xs uppercase tracking-wider transition shadow"
-                  >
-                    Save & Add to Catalog
-                  </button>
-                </form>
+                              <td className="py-3 px-3 font-mono font-bold text-white">
+                                <div>${prod.discountPrice.toFixed(2)}</div>
+                                <div className="text-[10px] text-slate-500 line-through">${prod.originalPrice.toFixed(2)}</div>
+                              </td>
+
+                              <td className="py-3 px-3 font-mono font-bold text-emerald-400">
+                                +${profit} ({( (prod.commissionRate || 0.20) * 100 ).toFixed(0)}%)
+                              </td>
+
+                              <td className="py-3 px-3 font-mono text-slate-300">
+                                {prod.stock || 50} units
+                              </td>
+
+                              <td className="py-3 px-4 text-right">
+                                <button
+                                  onClick={() => handleOpenShareModal(prod)}
+                                  className="bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 font-bold px-3 py-1.5 rounded-xl text-xs transition flex items-center gap-1.5 ml-auto shadow"
+                                >
+                                  <Link className="w-3.5 h-3.5" />
+                                  <span>Generate Share Link</span>
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -2409,6 +2922,245 @@ export const AdminPortal: React.FC = () => {
                 </div>
               );
             })()}
+          </div>
+        </div>
+      )}
+
+      {/* 1. Administrative Withdrawal Decision & Custom Reason Modal */}
+      {wdModalTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl relative space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                    wdDecision === 'approve' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
+                  }`}
+                >
+                  {wdDecision === 'approve' ? <CheckCircle2 className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white">
+                    {wdDecision === 'approve' ? 'Approve & Release Payout' : 'Reject Withdrawal Application'}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Applicant: <strong className="text-white">{wdModalTarget.userName}</strong> ({wdModalTarget.userEmail})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setWdModalTarget(null)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Payout Details */}
+            <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800/80 grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <span className="text-slate-500 block text-[10px]">Net Payout Amount:</span>
+                <span className="font-mono font-black text-emerald-400 text-sm">
+                  ${wdModalTarget.receivedAmount.toFixed(2)}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[10px]">Destination Method:</span>
+                <span className="font-bold text-slate-200">{wdModalTarget.method}</span>
+              </div>
+              <div className="col-span-2 pt-1 border-t border-slate-800">
+                <span className="text-slate-500 block text-[10px]">Account / Wallet Address:</span>
+                <span className="font-mono text-amber-300 text-[11px] break-all select-all">
+                  {wdModalTarget.accountDetails}
+                </span>
+              </div>
+            </div>
+
+            {/* Admin Note / Rejection Reason Input */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-200 flex items-center justify-between">
+                <span>
+                  {wdDecision === 'approve'
+                    ? 'Administrative Approval Note / Transaction Ref:'
+                    : 'Rejection Reason (Shown to User on Front):'}
+                </span>
+                <span className="text-[10px] text-amber-400 font-normal">Custom text & note</span>
+              </label>
+              <textarea
+                rows={3}
+                value={wdNote}
+                onChange={e => setWdNote(e.target.value)}
+                placeholder={
+                  wdDecision === 'approve'
+                    ? 'e.g. Paid via USDT TRC20 TX-7391823. Transferred successfully.'
+                    : 'e.g. Destination account details did not match KYC verified profile. Please update.'
+                }
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white placeholder-slate-500 outline-none focus:border-amber-400"
+                required
+              />
+            </div>
+
+            {/* Timestamp input / audit record */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-amber-400" />
+                <span>Audit Timestamp</span>
+              </label>
+              <input
+                type="text"
+                value={wdTime}
+                onChange={e => setWdTime(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-300 font-mono outline-none focus:border-amber-400"
+              />
+              <p className="text-[10px] text-slate-400">
+                This exact note and timestamp will be shown in the user's frontend Withdrawal History tab and notifications.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setWdModalTarget(null)}
+                className="flex-1 py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmWdDecision}
+                className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition shadow flex items-center justify-center gap-1.5 ${
+                  wdDecision === 'approve'
+                    ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                    : 'bg-rose-500 hover:bg-rose-400 text-white'
+                }`}
+              >
+                {wdDecision === 'approve' ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                <span>{wdDecision === 'approve' ? 'Confirm Payout Approval' : 'Confirm Rejection & Refund'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Custom Product Share / Direct-Buy Link Modal */}
+      {shareTargetProd && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+          <div className="w-full max-w-lg bg-slate-900 border border-amber-500/40 rounded-3xl p-6 shadow-2xl relative space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                  <Link className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white">Create Custom Direct-Buy Share Link</h3>
+                  <p className="text-xs text-slate-400">Customize price & guaranteed profit for your customer</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShareTargetProd(null)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Target Product Preview */}
+            <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center gap-3">
+              <img
+                src={shareTargetProd.imageUrl}
+                alt={shareTargetProd.title}
+                className="w-14 h-14 object-contain bg-white rounded-xl p-1 shrink-0"
+              />
+              <div className="flex-1 min-w-0">
+                <span className="text-[10px] uppercase font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                  {shareTargetProd.category}
+                </span>
+                <p className="font-bold text-white text-xs truncate mt-1">{shareTargetProd.title}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  Original Catalog Discount Price:{' '}
+                  <strong className="text-slate-200 font-mono">${shareTargetProd.discountPrice.toFixed(2)}</strong>
+                </p>
+              </div>
+            </div>
+
+            {/* Customization Inputs */}
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-300">Custom Deal Title</label>
+                <input
+                  type="text"
+                  value={shareTitle}
+                  onChange={e => setShareTitle(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-400 font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Target Selling Price ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={sharePrice}
+                    onChange={e => setSharePrice(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono font-bold outline-none focus:border-amber-400"
+                  />
+                  <span className="text-[10px] text-slate-500">Amount buyer will pay</span>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-emerald-400">Guaranteed Profit ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={shareProfit}
+                    onChange={e => setShareProfit(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-slate-950 border border-emerald-500/40 rounded-xl px-3 py-2 text-xs text-emerald-300 font-mono font-bold outline-none focus:border-emerald-400"
+                  />
+                  <span className="text-[10px] text-slate-500">Credited on fulfillment</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Generated Link URL Box */}
+            <div className="space-y-1.5 p-3 rounded-2xl bg-slate-950 border border-amber-500/30">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="font-bold text-amber-400 flex items-center gap-1">
+                  <Link className="w-3.5 h-3.5" /> Direct-Buy Share URL
+                </span>
+                {copyFeedback && (
+                  <span className="text-emerald-400 font-bold flex items-center gap-1">
+                    <Check className="w-3 h-3" /> Link Copied to Clipboard!
+                  </span>
+                )}
+              </div>
+              <input
+                type="text"
+                readOnly
+                value={getShareableUrl()}
+                className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-[10px] font-mono text-slate-300 select-all outline-none"
+              />
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleCopyShareLink}
+                className="w-full sm:flex-1 py-2.5 px-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 text-xs font-black rounded-xl transition shadow flex items-center justify-center gap-1.5"
+              >
+                {copyFeedback ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                <span>{copyFeedback ? 'Copied Successfully!' : 'Copy Share Link'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleTestShareLinkInStore}
+                className="w-full sm:flex-1 py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 border border-slate-700"
+              >
+                <ExternalLink className="w-4 h-4 text-amber-400" />
+                <span>Test Link in Front Store</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

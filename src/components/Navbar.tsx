@@ -87,21 +87,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
 
             <button
-              onClick={() => setIsSupabaseModalOpen(true)}
-              className="flex items-center gap-1.5 font-semibold text-emerald-200 bg-emerald-950/70 hover:bg-emerald-900/90 px-2.5 py-1 rounded-lg border border-emerald-500/40 text-[11px] transition shadow-sm"
-              title="Configure Supabase Cloud Database"
-            >
-              <Database className="w-3 h-3 text-emerald-400" />
-              <span className="hidden sm:inline">Supabase</span>
-              <span>DB</span>
-              <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                  isSupabaseConfigured ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]' : 'bg-amber-400'
-                }`}
-              ></span>
-            </button>
-
-            <button
               onClick={() => setViewMode(viewMode === 'frontend' ? 'backend' : 'frontend')}
               className="bg-slate-900/90 hover:bg-slate-900 text-white font-medium text-[11px] px-3 py-1 rounded-lg transition flex items-center gap-1.5 border border-white/20"
             >
@@ -247,22 +232,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             {unreadNotificationCount > 0 && (
               <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
             )}
-          </button>
-
-          {/* Supabase Cloud Database Quick Setup Button */}
-          <button
-            onClick={() => setIsSupabaseModalOpen(true)}
-            className="relative p-2 text-slate-300 hover:text-emerald-300 hover:bg-slate-800 rounded-lg transition flex items-center gap-1 border border-emerald-500/20 bg-emerald-950/40"
-            title="Supabase Database Settings"
-          >
-            <Database className="w-4 h-4 text-emerald-400" />
-            <span
-              className={`w-2 h-2 rounded-full ${
-                isSupabaseConfigured
-                  ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]'
-                  : 'bg-amber-400 animate-pulse'
-              }`}
-            ></span>
           </button>
 
           {/* Login / Register with Referral Code Button */}

@@ -468,6 +468,46 @@ export const WithdrawModal: React.FC = () => {
                       </div>
                     )}
 
+                    {/* Admin Remark / Rejection Reason Note */}
+                    {w.adminRemark && (
+                      <div
+                        className={`p-2.5 rounded-lg border text-[11px] space-y-1 ${
+                          w.status === 'approved'
+                            ? 'bg-emerald-50/90 border-emerald-200 text-emerald-950'
+                            : w.status === 'rejected'
+                            ? 'bg-rose-50/90 border-rose-200 text-rose-950'
+                            : 'bg-amber-50/90 border-amber-200 text-amber-950'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 font-bold">
+                          {w.status === 'approved' && (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              <span className="text-emerald-800">Admin Approval Note:</span>
+                            </>
+                          )}
+                          {w.status === 'rejected' && (
+                            <>
+                              <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                              <span className="text-rose-800">Decline Reason from Admin:</span>
+                            </>
+                          )}
+                          {w.status === 'pending' && (
+                            <>
+                              <Clock className="w-3.5 h-3.5 text-amber-600" />
+                              <span className="text-amber-800">Audit Status:</span>
+                            </>
+                          )}
+                        </div>
+                        <p className="text-slate-800 font-medium pl-5 italic">"{w.adminRemark}"</p>
+                        {w.processedAt && (
+                          <p className="text-[10px] text-slate-500 pl-5">
+                            Decided at: <span className="font-semibold text-slate-700">{w.processedAt}</span>
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                     <div className="text-[10px] text-slate-400">
                       Requested: {w.requestedAt}
                     </div>

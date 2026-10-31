@@ -14,6 +14,7 @@ import { MessagesModal } from './components/frontend/MessagesModal';
 import { CustomerServiceChat } from './components/frontend/CustomerServiceChat';
 import { PlansModal } from './components/frontend/PlansModal';
 import { SupabaseSettingsModal } from './components/frontend/SupabaseSettingsModal';
+import { DirectDealModal } from './components/frontend/DirectDealModal';
 import { AdminPortal } from './components/backend/AdminPortal';
 import { ProductCategory } from './types';
 
@@ -63,6 +64,7 @@ function EsellerApp() {
       <MessagesModal />
       <CustomerServiceChat />
       <PlansModal />
+      <DirectDealModal />
       <SupabaseSettingsModal
         isOpen={isSupabaseModalOpen}
         onClose={() => setIsSupabaseModalOpen(false)}

