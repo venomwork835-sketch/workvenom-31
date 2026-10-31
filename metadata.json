@@ -1,0 +1,7 @@
+{
+  "name": "Ebuy",
+  "description": "Amazon-style e-commerce platform with dual customer front and backend administrative management portal.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
