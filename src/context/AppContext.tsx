@@ -195,7 +195,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Telegram Support URL Config
   const [telegramSupportUrl, setTelegramSupportUrlState] = useState<string>(() => {
-    return localStorage.getItem(`${LOCAL_STORAGE_KEY}_telegramUrl`) || 'https://t.me/EbuyOfficialSupport';
+    return localStorage.getItem(`${LOCAL_STORAGE_KEY}_telegramUrl`) || 'https://t.me/EsellerOfficialSupport';
   });
 
   const setTelegramSupportUrl = (url: string) => {

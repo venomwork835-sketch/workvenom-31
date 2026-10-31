@@ -1,6 +1,6 @@
 {
-  "name": "Ebuy",
-  "description": "Amazon-style e-commerce platform with dual customer front and backend administrative management portal.",
+  "name": "Eseller",
+  "description": "Eseller - Global wholesale and retail merchant platform offering 20% discount on trending tech, mobiles, audio, and store activation plans.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -17,7 +17,7 @@ import { SupabaseSettingsModal } from './components/frontend/SupabaseSettingsMod
 import { AdminPortal } from './components/backend/AdminPortal';
 import { ProductCategory } from './types';
 
-function EbuyApp() {
+function EsellerApp() {
   const { viewMode, frontendTab, isSupabaseModalOpen, setIsSupabaseModalOpen } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory>('all');
@@ -74,7 +74,7 @@ function EbuyApp() {
 export default function App() {
   return (
     <AppProvider>
-      <EbuyApp />
+      <EsellerApp />
     </AppProvider>
   );
 }

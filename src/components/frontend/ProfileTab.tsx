@@ -45,7 +45,7 @@ export const ProfileTab: React.FC = () => {
   const [copiedReferral, setCopiedReferral] = React.useState(false);
 
   const handleCopyCode = () => {
-    navigator.clipboard?.writeText(currentUser.referralCode || 'REF-EBUY99');
+    navigator.clipboard?.writeText(currentUser.referralCode || 'REF-ESELLER99');
     setCopiedReferral(true);
     setTimeout(() => setCopiedReferral(false), 2000);
   };
